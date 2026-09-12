@@ -1,0 +1,40 @@
+[project]
+name = "graphify-workspace"
+version = "0.1.0"
+description = "Extract each mani.yaml checkout, then merge Graphify graphs."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "PWare", email = "pawel@pware.ai" }]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/pleware/graphify-workspace"
+Repository = "https://github.com/pleware/graphify-workspace"
+
+[project.scripts]
+graphify-workspace = "graphify_workspace.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/graphify_workspace"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,9 @@
+graphify-workspace
+Copyright 2026 pware | pware.ai
+
+This product includes software developed at pware (https://pware.ai).
+
+graphify-workspace is a companion to Graphify (https://github.com/Graphify-Labs/graphify),
+which is licensed under the Apache License, Version 2.0. This package does not
+vendor Graphify; it calls the graphify CLI to extract per checkout and merge
+into graphify-out/graph.json.
