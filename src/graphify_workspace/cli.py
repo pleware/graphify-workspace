@@ -65,10 +65,7 @@ def main(argv: list[str] | None = None) -> int:
     targets, skipped = plan(root)
     print(f"[graphify-workspace] root {root}")
     if backend or model:
-        print(
-            "[graphify-workspace] llm "
-            f"{backend or 'auto'} / {model or 'backend-default'}"
-        )
+        print(f"[graphify-workspace] llm {backend or 'auto'} / {model or 'backend-default'}")
     for note in skipped:
         print(f"[graphify-workspace] skip {note}")
     for target in targets:
@@ -87,16 +84,16 @@ def main(argv: list[str] | None = None) -> int:
     graphs: list[Path] = []
     failed_docs: list[Path] = []
     for target in targets:
-        got = extract(
+        result = extract(
             target,
             skip_docs=args.skip_docs,
             graphify=graphify,
             backend=backend,
             model=model,
         )
-        if got is not None:
-            graphs.append(got)
-        elif target.kind == "docs":
+        if result.graph is not None:
+            graphs.append(result.graph)
+        if result.docs_failed:
             failed_docs.append(target.path)
 
     if not graphs:
@@ -110,5 +107,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[graphify-workspace] wrote {out_graph}")
     if failed_docs:
         hint = "DEEPSEEK_API_KEY" if backend == "deepseek" else "the configured API key"
-        print(f"[graphify-workspace] drafts/docs missing until {hint} is set")
+        print(
+            f"[graphify-workspace] Markdown missing for {len(failed_docs)} tree(s) — "
+            "the merge holds their code only. Listed as docs-failed= in "
+            "graphify-out/SOURCES.txt.",
+            file=sys.stderr,
+        )
+        print(
+            f"[graphify-workspace] causes: no {hint}; or an incomplete extract that "
+            "tripped graphify's shrink guard, which a re-run usually clears.",
+            file=sys.stderr,
+        )
     return 0

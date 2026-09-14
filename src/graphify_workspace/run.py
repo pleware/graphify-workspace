@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -12,6 +13,18 @@ from graphify_workspace.plan import Target
 
 class GraphifyMissingError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class ExtractResult:
+    """What one tree contributed, and whether its Markdown pass failed.
+
+    The two are independent: a ``both`` tree that loses its Markdown still
+    hands back a code graph, and the caller still has to report the loss.
+    """
+
+    graph: Path | None
+    docs_failed: bool
 
 
 def require_graphify() -> str:
@@ -28,12 +41,17 @@ def docs_extract_cmd(
     backend: str | None,
     model: str | None,
 ) -> list[str]:
+    """Full extract: AST **and** Markdown. Graphify does both without ``--code-only``."""
     cmd = [graphify, "extract", str(path), "--no-cluster"]
     if backend:
         cmd.extend(["--backend", backend])
     if model:
         cmd.extend(["--model", model])
     return cmd
+
+
+def code_extract_cmd(graphify: str, path: Path) -> list[str]:
+    return [graphify, "extract", str(path), "--code-only", "--no-cluster"]
 
 
 def _docs_key_hint(backend: str | None) -> str:
@@ -50,6 +68,17 @@ def _docs_key_hint(backend: str | None) -> str:
     return "the API key for graphify.backend (or GEMINI_API_KEY / OPENAI_API_KEY)"
 
 
+def _extract_code(graphify: str, path: Path, graph: Path) -> Path:
+    completed = subprocess.run(code_extract_cmd(graphify, path), check=False)
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"graphify extract --code-only failed for {path} (exit {completed.returncode})"
+        )
+    if not graph.is_file():
+        raise RuntimeError(f"no graph.json after extract of {path}")
+    return graph
+
+
 def extract(
     target: Target,
     *,
@@ -57,12 +86,13 @@ def extract(
     graphify: str,
     backend: str | None = None,
     model: str | None = None,
-) -> Path | None:
+) -> ExtractResult:
     graph = target.path / "graphify-out" / "graph.json"
+
     if target.kind == "docs":
         if skip_docs:
             print(f"[graphify-workspace] skip docs {target.path} (--skip-docs)")
-            return None
+            return ExtractResult(None, docs_failed=False)
         print(f"[graphify-workspace] extract docs {target.path}")
         completed = subprocess.run(
             docs_extract_cmd(graphify, target.path, backend=backend, model=model),
@@ -73,22 +103,31 @@ def extract(
                 "[graphify-workspace] docs extract failed "
                 f"(need {_docs_key_hint(backend)} for Markdown). Continuing."
             )
-            return None
-        return graph if graph.is_file() else None
+            return ExtractResult(None, docs_failed=True)
+        return ExtractResult(graph if graph.is_file() else None, docs_failed=False)
+
+    if target.kind == "both":
+        if skip_docs:
+            print(f"[graphify-workspace] extract code {target.path} (--skip-docs)")
+            return ExtractResult(_extract_code(graphify, target.path, graph), docs_failed=False)
+        print(f"[graphify-workspace] extract code+docs {target.path}")
+        completed = subprocess.run(
+            docs_extract_cmd(graphify, target.path, backend=backend, model=model),
+            check=False,
+        )
+        if completed.returncode == 0 and graph.is_file():
+            return ExtractResult(graph, docs_failed=False)
+        # Never let a Markdown failure cost the AST too: fall back to the
+        # code-only pass this tree would have had before ``both`` existed.
+        print(
+            "[graphify-workspace] code+docs extract failed "
+            f"(need {_docs_key_hint(backend)} for Markdown) — "
+            "retrying code-only so the source is still indexed."
+        )
+        return ExtractResult(_extract_code(graphify, target.path, graph), docs_failed=True)
 
     print(f"[graphify-workspace] extract code {target.path}")
-    completed = subprocess.run(
-        [graphify, "extract", str(target.path), "--code-only", "--no-cluster"],
-        check=False,
-    )
-    if completed.returncode != 0:
-        raise RuntimeError(
-            f"graphify extract --code-only failed for {target.path} "
-            f"(exit {completed.returncode})"
-        )
-    if not graph.is_file():
-        raise RuntimeError(f"no graph.json after extract of {target.path}")
-    return graph
+    return ExtractResult(_extract_code(graphify, target.path, graph), docs_failed=False)
 
 
 def merge_graphs(graphs: list[Path], out: Path, *, graphify: str) -> None:

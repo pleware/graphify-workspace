@@ -17,11 +17,13 @@ every on-disk product row.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
 CODE_SUFFIXES = {".go", ".py", ".ts", ".tsx", ".js", ".jsx", ".rs"}
+DOC_SUFFIXES = {".md"}
 SKIP_DIR_NAMES = frozenset(
     {"node_modules", "graphify-out", ".git", "__pycache__", ".venv", "dist", "build"}
 )
@@ -202,21 +204,45 @@ def parse_graphify_block(
     return spec.local_keys, spec.depends
 
 
+def classify_tree(directory: Path) -> tuple[bool, bool]:
+    """``(has_code, has_markdown)``, from one walk that prunes ``SKIP_DIR_NAMES``.
+
+    Pruning is what keeps this cheap on a tree with a populated
+    ``node_modules``: the skipped names are dropped from the descent, not
+    filtered out of the results afterwards.
+    """
+    code = False
+    markdown = False
+    for _current, dirnames, filenames in os.walk(directory):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIR_NAMES]
+        for name in filenames:
+            suffix = Path(name).suffix.lower()
+            if suffix in CODE_SUFFIXES:
+                code = True
+            elif suffix in DOC_SUFFIXES:
+                markdown = True
+            if code and markdown:
+                return True, True
+    return code, markdown
+
+
 def has_code(directory: Path) -> bool:
-    for child in directory.rglob("*"):
-        if not child.is_file():
-            continue
-        if any(part in SKIP_DIR_NAMES for part in child.parts):
-            continue
-        if child.suffix.lower() in CODE_SUFFIXES:
-            return True
-    return False
+    return classify_tree(directory)[0]
 
 
 def kind_for(abs_path: Path, rel: str) -> str:
+    """``docs``, ``code``, or ``both``.
+
+    ``both`` exists because a product checkout usually carries a README beside
+    its source, and a code-only extract drops it — the graph then holds the
+    functions but not the file that says what they are for.
+    """
     if rel == ".":
         return "docs"
-    return "code" if has_code(abs_path) else "docs"
+    code, markdown = classify_tree(abs_path)
+    if code and markdown:
+        return "both"
+    return "code" if code else "docs"
 
 
 def targets_from_registry(

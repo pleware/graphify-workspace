@@ -1,7 +1,9 @@
 from pathlib import Path
 
 from graphify_workspace.plan import (
+    classify_tree,
     has_code,
+    kind_for,
     mani_projects,
     parse_flow_or_block_list,
     parse_graphify_block,
@@ -125,3 +127,44 @@ def test_has_code_ignores_node_modules(tmp_path: Path) -> None:
     assert has_code(tmp_path) is False
     (tmp_path / "app.ts").write_text("export {}\n", encoding="utf-8")
     assert has_code(tmp_path) is True
+
+
+def test_a_vendored_readme_does_not_make_a_tree_documented(tmp_path: Path) -> None:
+    nested = tmp_path / "node_modules" / "pkg"
+    nested.mkdir(parents=True)
+    (nested / "README.md").write_text("# vendored\n", encoding="utf-8")
+    (tmp_path / "app.ts").write_text("export {}\n", encoding="utf-8")
+    assert classify_tree(tmp_path) == (True, False)
+    assert kind_for(tmp_path, "app") == "code"
+
+
+def test_source_beside_a_readme_is_both(tmp_path: Path) -> None:
+    (tmp_path / "app.ts").write_text("export {}\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# what this is for\n", encoding="utf-8")
+    assert classify_tree(tmp_path) == (True, True)
+    assert kind_for(tmp_path, "app") == "both"
+
+
+def test_markdown_with_no_source_stays_docs(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# recipes\n", encoding="utf-8")
+    (tmp_path / "build.sh").write_text("echo hi\n", encoding="utf-8")
+    assert classify_tree(tmp_path) == (False, True)
+    assert kind_for(tmp_path, "contrib") == "docs"
+
+
+def test_the_umbrella_root_is_docs_whatever_it_holds(tmp_path: Path) -> None:
+    (tmp_path / "app.ts").write_text("export {}\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("# umbrella\n", encoding="utf-8")
+    assert kind_for(tmp_path, ".") == "docs"
+
+
+def test_plan_marks_a_documented_product_both(tmp_path: Path) -> None:
+    (tmp_path / "mani.yaml").write_text(LOCAL_MANI, encoding="utf-8")
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    (lib / "main.go").write_text("package lib\n", encoding="utf-8")
+    (lib / "README.md").write_text("# lib\n", encoding="utf-8")
+
+    targets, _ = plan(tmp_path)
+    by_source = {t.source: t for t in targets}
+    assert by_source["mani:lib"].kind == "both"

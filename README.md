@@ -48,6 +48,27 @@ does not steal the run. The API key is **not** in this file — each laptop
 sets `DEEPSEEK_API_KEY` in the user environment or in a gitignored
 `mise.local.toml` (copy the umbrella's `mise.local.toml.example`).
 
+## What each tree gets
+
+Classification is per tree, from one pruned walk of it:
+
+| Kind | When | Extract |
+| --- | --- | --- |
+| `docs` | the umbrella root (`path: .`), or no recognised source file | full — Markdown needs the key |
+| `code` | source, no Markdown | `--code-only`, no key needed |
+| `both` | source **and** Markdown | full, so a product's `README` reaches the graph |
+
+`both` exists because a checkout usually documents itself next to its source,
+and `--code-only` drops exactly that file. If the Markdown pass fails on a
+`both` tree the kit falls back to `--code-only`: losing the docs must not cost
+the AST. That fallback is reported as `docs-failed=` in `SOURCES.txt`.
+
+`--skip-docs` needs no key and is not a failure — a `both` tree takes the
+`--code-only` path and nothing is recorded as failed.
+
+Vendored Markdown does not count: the walk prunes `node_modules`, `dist`,
+`build`, `.venv`, `__pycache__`, `.git` and `graphify-out` as it descends.
+
 Omit the whole `graphify:` block to mean this umbrella's docs plus every
 on-disk product row. Omit `backend` / `model` to let Graphify auto-detect
 from whichever key is set (Gemini wins if both exist).

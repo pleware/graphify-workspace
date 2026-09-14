@@ -18,3 +18,4 @@ graphify-out/
 .cursor/skills/agentize.auto.generated*
 .opencode/skills/agentize.auto.generated*
 .agentize/
+mise.local.toml
